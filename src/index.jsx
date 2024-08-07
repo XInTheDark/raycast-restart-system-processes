@@ -37,19 +37,19 @@ function getAdvancedDropdown() {
   });
 }
 
-async function getKillallExe() {
-  let killall = await new Promise((resolve) => {
-    exec("which killall", (error, stdout) => {
+async function getExePath(exe) {
+  let path = await new Promise((resolve) => {
+    exec(`which ${exe}`, (error, stdout) => {
       resolve(error ? null : stdout.trim());
     });
   });
 
-  if (killall) {
-    return killall;
+  if (path) {
+    return path;
   }
 
   // test a few common locations
-  const locations = ["/usr/bin/killall", "/bin/killall", "/usr/sbin/killall", "/sbin/killall"];
+  const locations = [`/usr/bin/${exe}`, `/bin/${exe}`, `/usr/sbin/${exe}`, `/sbin/${exe}`];
   for (const loc of locations) {
     if (
       await new Promise((resolve) => {
@@ -84,7 +84,12 @@ export default function Command() {
     <Form
       actions={
         <ActionPanel>
-          <Action.SubmitForm onSubmit={performAction} />
+          <Action.SubmitForm
+            title="Restart Process"
+            onSubmit={async (values) => {
+              await performAction(values);
+            }}
+          />
         </ActionPanel>
       }
     >
@@ -134,22 +139,44 @@ async function performAction(values) {
       if (!userConfirmed) return;
     }
 
-    const killall = await getKillallExe();
+    const killall = await getExePath("killall");
     if (!killall) {
       await showToast(Toast.Style.Failure, "killall executable not found");
       return;
     }
     cmd = `sudo ${killall} -KILL ${action}`;
   } else {
-    cmd = `sudo launchctl stop ${action}`;
+    const launchctl = await getExePath("launchctl");
+    if (!launchctl) {
+      await showToast(Toast.Style.Failure, "launchctl executable not found");
+      return;
+    }
+    cmd = `sudo ${launchctl} stop ${action}`;
   }
 
-  exec(cmd, (error) => {
+  let success = true;
+
+  let child = exec(cmd, (error, stdout, stderr) => {
     if (error) {
       console.log(`exec error: ${error}`);
       showToast(Toast.Style.Failure, `Error: ${error.message}`);
-      return;
+      success = false;
     }
-    showToast(Toast.Style.Success, `${name} restarted`);
+    if (stderr) {
+      console.log(`stderr: ${stderr}`);}
+    if (stdout) {
+      console.log(`stdout: ${stdout}`);
+    }
   });
+
+  // return only after the process has finished
+  await new Promise((resolve) => {
+    child.on("exit", resolve);
+  });
+
+  await new Promise((resolve) => {setTimeout(resolve, 5);});
+
+  if (success) {
+    await showToast(Toast.Style.Success, `${name} restarted`);
+  }
 }
