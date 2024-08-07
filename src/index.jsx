@@ -1,4 +1,4 @@
-import { Action, ActionPanel, confirmAlert, Form, Icon, showToast, Toast } from "@raycast/api";
+import { Action, ActionPanel, confirmAlert, Form, Icon, showToast, Toast, LocalStorage } from "@raycast/api";
 import { exec } from "child_process";
 import { useEffect, useState } from "react";
 
@@ -65,9 +65,18 @@ async function getExePath(exe) {
   return null;
 }
 
+async function getSudoOption() {
+  return !!((await LocalStorage.getItem("sudoOption")) ?? "");
+}
+
+async function setSudoOption(value) {
+  await LocalStorage.setItem("sudoOption", value ? "true" : "");
+}
+
 export default function Command() {
   const [dropdown, setDropdown] = useState(null);
   const [advancedMode, setAdvancedMode] = useState(false);
+  const [sudo, setSudo] = useState(false);
 
   // initialise dropdown based on advanced mode
   useEffect(() => {
@@ -79,6 +88,13 @@ export default function Command() {
       }
     })();
   }, [advancedMode]);
+
+  // initialise sudo option
+  useEffect(() => {
+    (async () => {
+      setSudo(await getSudoOption());
+    })();
+  }, []);
 
   return (
     <Form
@@ -98,6 +114,13 @@ export default function Command() {
       </Form.Dropdown>
       <Form.Separator />
       <Form.Checkbox
+        label="Sudo"
+        value={sudo}
+        id="sudo"
+        onChange={setSudo}
+        info="Use sudo when running the command. This is required for some processes. See README for more info."
+      />
+      <Form.Checkbox
         label="Advanced Mode"
         value={advancedMode}
         id="advancedMode"
@@ -111,8 +134,14 @@ export default function Command() {
 async function performAction(values) {
   const advancedMode = values?.advancedMode,
     name = values?.name,
-    action = advancedMode ? name : actions[name];
+    action = advancedMode ? name : actions[name],
+    sudoOption = values?.sudo ?? false,
+    sudo = sudoOption ? "sudo" : "";
   let cmd = "";
+
+  try {
+    await setSudoOption(sudo);
+  } catch (e) {} // eslint-disable-line
 
   if (!action) {
     await showToast(Toast.Style.Failure, "No process selected");
@@ -144,14 +173,14 @@ async function performAction(values) {
       await showToast(Toast.Style.Failure, "killall executable not found");
       return;
     }
-    cmd = `sudo ${killall} -KILL ${action}`;
+    cmd = `${sudo} ${killall} -KILL ${action}`;
   } else {
     const launchctl = await getExePath("launchctl");
     if (!launchctl) {
       await showToast(Toast.Style.Failure, "launchctl executable not found");
       return;
     }
-    cmd = `sudo ${launchctl} stop ${action}`;
+    cmd = `${sudo} ${launchctl} stop ${action}`;
   }
 
   let success = true;
@@ -163,7 +192,8 @@ async function performAction(values) {
       success = false;
     }
     if (stderr) {
-      console.log(`stderr: ${stderr}`);}
+      console.log(`stderr: ${stderr}`);
+    }
     if (stdout) {
       console.log(`stdout: ${stdout}`);
     }
@@ -174,7 +204,9 @@ async function performAction(values) {
     child.on("exit", resolve);
   });
 
-  await new Promise((resolve) => {setTimeout(resolve, 5);});
+  await new Promise((resolve) => {
+    setTimeout(resolve, 5);
+  });
 
   if (success) {
     await showToast(Toast.Style.Success, `${name} restarted`);
