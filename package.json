@@ -13,8 +13,8 @@
   "commands": [
     {
       "name": "index",
-      "title": "Submit Form",
-      "description": "Template for submitting a form",
+      "title": "Restart System Processes",
+      "description": "Restart system processes",
       "mode": "view"
     }
   ],
