@@ -3,7 +3,7 @@
   "name": "restart-system-processes",
   "title": "Restart System Processes",
   "description": "Restart system processes such as Finder, Dock, Menu Bar, Audio and more!",
-  "icon": "command-icon.png",
+  "icon": "main-icon.png",
   "author": "muzhen_gaming",
   "categories": [
     "Productivity",
